@@ -2,23 +2,27 @@ const ExcelJS = require('exceljs');
 const Excel = require('exceljs/modern.nodejs');
 const express = require('express');
 var bodyParser = require('body-parser');
-const app = express();
-const swaggerJsDoc=require('swagger-jsdoc');
-const swaggerUi= require('swagger-ui-express');
-const swaggerOptions={
-   swaggerDefinition:{
-      info:{
-      
-         "title": "Sample generation using meta data",
-         "description": "This is a sample server generating xls or csv file based on kibana metadata.",
+const swaggerJsDoc = require('swagger-jsdoc');
+const swaggerui = require('swagger-ui-express');
+const esUrl = "localhost:9200";
+const swaggerOptions = {
+   swaggerDefinition: {
+      info: {
+         title: 'QueryBuilding',
+         description: 'Query building index:".data*"from kibana'
       },
-   servers:["http://localhost:3035"]
-   
-},
-apis:["server.js"]
+      servers: ["http://localhost:3035"]
+   },
+   apis: ["server.js"]
 };
-const swaggerDocs=swaggerJsDoc(swaggerOptions);
-app.use("/api-docs",swaggerUi.serve,swaggerUi.setup(swaggerDocs));
+const swaggerDocs = swaggerJsDoc(swaggerOptions);
+var path = require('path');
+const app = express();
+app.use(express.static(path.join(__dirname + './Reports')));
+app.use('/', express.static('app', { redirect: false }));
+app.use('/api-docs', swaggerui.serve, swaggerui.setup(swaggerDocs));
+
+
 app.use(bodyParser.json({
    limit: '10mb',
    parameterLimit: 10000
@@ -28,13 +32,16 @@ app.use(bodyParser.urlencoded({
    parameterLimit: 10000,
    extended: true
 }));
+
+
+
 /**
  * @swagger
- * /api/v1/excel:
+ * /api/v1/agg/excel:
 *   post:
- *     description: Generate xls based on kibana metadata
+ *     description: export as excel from elasticsearch with aggregation
  *     produces:
- *       - application/xls
+ *       - application/xlsx
  *     parameters:
  *       - name: id
  *         description: data to post
@@ -49,20 +56,27 @@ app.use(bodyParser.urlencoded({
  *           type: file
  *
  */
-app.post('/api/v1/excel', function (req, res) {
+
+app.post('/api/v1/agg/excel', function (req, res) {
    get_Esquery(req.body, 'excel').then(result => {
       if (result.status == "success") {
-         res.download('./' + req.body.title + '.xlsx');
-         //res.send('success');
+         console.log('File created successfully\nFilename:' + result.fileName + '\nPath:' + result.path);
+         // res.send('File created successfully\nFilename:' + result.fileName + '\nPath:' + result.path);
+         res.download('./Reports/' + result.fileName);
+
       }
+     
    })
 
 });
+
+//Routes
+/**
 /**
  * @swagger
- * /api/v1/csv:
-*   post:
- *     description: Generate CSV based on kibana metadata
+ * /api/v1/agg/csv:
+ *   post:
+ *     description: export as CSV from elasticsearch with aggregation
  *     produces:
  *       - application/csv
  *     parameters:
@@ -73,20 +87,21 @@ app.post('/api/v1/excel', function (req, res) {
  *         schema:
  *           type: object
  *     responses:
- *       200:
- *         description: success
- *         schema:
- *           type: file
- *
+ *       201:
+ *         description: Created successfully
  */
-app.post('/api/v1/csv', function (req, res) {
+app.post('/api/v1/agg/csv', function (req, res) {
    get_Esquery(req.body, 'csv').then(result => {
       if (result.status == "success") {
-         res.download('./' + req.body.title + '.csv');
-         //res.send('success');
+         console.log('File created successfully\nFilename:' + result.fileName + '\nPath:' + result.path);
+         res.download('./' + result.fileName);
+         // res.send('File created successfully\nFilename:' + result.fileName + '\nPath:' + result.path);
       }
    })
 });
+
+
+
 var get_Esquery = function (metaData, download_type) {
    return new Promise((resolve, reject) => {
       var workbook = new Excel.Workbook();
@@ -94,7 +109,7 @@ var get_Esquery = function (metaData, download_type) {
       var bodybuilder = require('bodybuilder');
       var converter = require('number-to-words');
       var elasticClient = new elasticsearch.Client({
-         host: 'localhost:9200'
+         host: esUrl
       });
 
       //var metaData = { "title": "data-table3", "type": "table", "params": { "dimensions": { "metrics": [{ "accessor": 0, "format": { "id": "number" }, "params": {}, "aggType": "avg" }], "buckets": [] }, "perPage": 10, "showMetricsAtAllLevels": false, "showPartialRows": false, "showTotal": false, "sort": { "columnIndex": null, "direction": null }, "totalFunc": "sum" }, "aggs": [{ "id": "3", "enabled": true, "type": "count", "schema": "metric", "params": {} }, { "id": "4", "enabled": true, "type": "terms", "schema": "bucket", "params": { "field": "age", "orderBy": "_key", "order": "desc", "size": 1000, "otherBucket": false, "otherBucketLabel": "Other", "missingBucket": false, "missingBucketLabel": "Missing" } }] }
@@ -175,7 +190,7 @@ var get_Esquery = function (metaData, download_type) {
       }
       var query2 = {
          body: {
-            size: 0,
+            size: 100,
             track_total_hits: true,
             query: {
                bool: {
@@ -370,23 +385,221 @@ var get_Esquery = function (metaData, download_type) {
                }
             }
          }
+         var date_time = new Date();
          if (download_type == "excel") {
-            workbook.xlsx.writeFile('./' + metaData.title + '.xlsx').then(function () {
-               console.log('hiiiiii');
-               resolve({ status: 'success', message: "Success" });
+            var filename = metaData.title + '.xlsx';
+            var fullpath = __dirname + "/Reports/" + filename;
+            workbook.xlsx.writeFile('./Reports/' + filename).then(function () {
+               resolve({ status: 'success', Timestamp: date_time, path: fullpath, fileName: filename });
             });
          }
          else {
-            workbook.csv.writeFile('./' + metaData.title + '.csv').then(function () {
-               resolve({ status: 'success', message: "Success" });
+            var filename = metaData.title + '.csv';
+            var fullpath = __dirname + "/Reports/" + filename;
+            workbook.csv.writeFile('./Reports/' + filename).then(function () {
+               resolve({ status: 'success', Timestamp: date_time, path: fullpath, fileName: filename });
             });
          }
       }), function (err) {
+         console.log("error")
          reject(err.message);
       };
 
    })
+}
 
 
+/**
+ * @swagger
+ * definitions:
+ *    index:
+ *       type: object
+ *       properties:
+ *          index_name:
+ *             type: string
+ */
+
+/**
+ * @swagger
+ * /api/v1/basic/excel:
+*   post:
+ *     description: export as excel from elasticsearch without aggregation
+ *     produces:
+ *       - application/xlsx
+ *     parameters:
+ *       - name: id
+ *         description: data to post
+ *         in: body
+ *         required: true
+ *         schema:
+ *           $ref: '#/definitions/index'
+ *           type: object
+ *     responses:
+ *       200:
+ *         description: success
+ *         schema:
+ *           type: file
+ *
+ */
+
+app.post('/api/v1/basic/excel', function (req, res) {
+   get_ES_without_aggs(req.body.index_name, 'excel').then(result => {
+      if (result.status == "success") {
+         console.log('File created successfully\nFilename:' + result.fileName + '\nPath:' + result.path);
+         // res.send('File created successfully\nFilename:' + result.fileName + '\nPath:' + result.path);
+         res.download('./Reports/' + result.fileName);
+
+      }
+   })
+
+});
+
+/**
+ * @swagger
+ * /api/v1/basic/csv:
+*   post:
+ *     description: export as excel from elasticsearch without aggregation
+ *     produces:
+ *       - application/csv
+ *     parameters:
+ *       - name: id
+ *         description: data to post
+ *         in: body
+ *         required: true
+ *         schema:
+ *           $ref: '#/definitions/index'
+ *           type: object
+ *     responses:
+ *       200:
+ *         description: success
+ *         schema:
+ *           type: file
+ *
+ */
+
+app.post('/api/v1/basic/csv', function (req, res) {
+   get_ES_without_aggs(req.body.index_name, 'csv').then(result => {
+      console.log(req.body.index)
+      if (result.status == "success") {
+         console.log('File created successfully\nFilename:' + result.fileName + '\nPath:' + result.path);
+         res.download('./Reports/' + result.fileName);
+         // res.send('File created successfully\nFilename:' + result.fileName + '\nPath:' + result.path);
+      }
+   })
+});
+
+
+
+var get_ES_without_aggs = function (index, download_type) {
+   console.log('hihihihi', index);
+
+   return new Promise((resolve, reject) => {
+      var workbook = new Excel.Workbook();
+      var Underscore = require('underscore')
+      var elasticsearch = require('elasticsearch/src/elasticsearch');
+      var bodybuilder = require('bodybuilder');
+      var converter = require('number-to-words');
+      var elasticClient = new elasticsearch.Client({
+         host: esUrl
+      });
+      var start1 = new Date();
+      var simulateTime = 1000
+      console.log('start time----->', start1);
+
+      elasticClient.search(
+         {
+            index: "."+index+"*",
+            size:5000
+         }
+      ).then(function (resp) {
+         console.log('Please wait while computing the execution time');
+         workbook.creator = 'Me',
+            workbook.lastModifiedBy = 'Him',
+            workbook.created = new Date(2019, 10, 3),
+            workbook.modified = new Date(),
+            workbook.lastPrinted = new Date(2019, 10, 1),
+            workbook.views = [
+               {
+                  x: 0, y: 0, width: 10000, height: 20000,
+                  firstSheet: 0, activeTab: 1, visibility: 'visible'
+               }
+            ]
+         var sheet = workbook.addWorksheet('My Sheet', { properties: { tabColor: { argb: 'FFC0000' } } });
+         sheet.pageSetup.margins = {
+            left: 0.7, right: 0.7,
+            top: 0.75, bottom: 0.75,
+            header: 0.3, footer: 0.3
+         };
+         var j = 0;
+         let ID = [];
+         var lookup = {};
+         var startResponse = new Date();
+         //console.log('1111111111', (startResponse - start1) / 1000)
+         for (let j = 0; j < resp.hits.hits.length; j++) {
+            var ID1 = Underscore.map(
+               Underscore.uniq(
+                  Underscore.map(Object.keys(resp.hits.hits[j]._source), function (obj) {
+                     if (ID.indexOf(obj) == -1)
+                        ID.push(obj);
+                     return JSON.stringify(obj);
+                  })
+               ), function (obj) {
+                  return JSON.parse(obj);
+               }
+            );
+
+
+         }
+         //console.log('iddddddddddddd', ID, ID.length)
+         var start3 = new Date();
+         // console.log('22222222222', (start3 - startResponse) / 1000)
+         let colArr = [];
+         for (let i in ID) {
+            colArr.push({ header: ID[i], key: ID[i], width: 30 });
+         }
+         sheet.columns = colArr;
+         var start4 = new Date();
+         //console.log('333333333', (start4 - start3) / 1000)
+         for (let j = 0; j < resp.hits.hits.length; j++) {
+            let element = resp.hits.hits[j];
+            sheet.addRow(element._source);
+         }
+         //console.log(ID, ID.length);
+         var end1 = new Date() - start1;
+         console.log("Execution time from start till adding:", end1 / 1000);
+         var start2 = new Date();
+
+         // const cell = sheet.row(5).cell(3);
+         // console.log('1111111111111111111', cell)
+         // sheet.getColumn('B').font = {
+         //    name: 'Times new roman',
+         //    color: { argb: 'black' },
+         //    family: 2,
+         //    size: 14,
+         //    italic: true
+         // };
+         // sheet.getColumn('Z').fill = {
+         //    type: 'pattern',
+         //    pattern: 'darkVertical',
+         //    fgColor: { argb: 'Red' }
+         // };
+
+         if (download_type == "excel") {
+            
+            var filename = 'sampleExcel' + '.xlsx';
+            var fullpath = __dirname + '/Reports/' + filename;
+            workbook.xlsx.writeFile('./Reports/' + filename).then(function () {
+               resolve({ status: 'success', path: fullpath, fileName: filename });
+            });
+         }
+         else {
+            var filename = 'sampleCsv' + '.csv';
+            var fullpath = __dirname + "/Reports/" + filename;
+            workbook.csv.writeFile('./Reports/' + filename).then(function () {
+               resolve({ status: 'success', path: fullpath, fileName: filename });
+            });
+         }
+      });
+   });
 }
 app.listen(3035);
