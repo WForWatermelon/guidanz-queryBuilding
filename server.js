@@ -65,7 +65,7 @@ app.post('/api/v1/agg/excel', function (req, res) {
          res.download('./Reports/' + result.fileName);
 
       }
-     
+
    })
 
 });
@@ -508,8 +508,8 @@ var get_ES_without_aggs = function (index, download_type) {
 
       elasticClient.search(
          {
-            index: "."+index+"*",
-            size:5000
+            index: "." + index + "*",
+            size: 5000
          }
       ).then(function (resp) {
          console.log('Please wait while computing the execution time');
@@ -584,8 +584,11 @@ var get_ES_without_aggs = function (index, download_type) {
          //    fgColor: { argb: 'Red' }
          // };
 
+
+
+
          if (download_type == "excel") {
-            
+
             var filename = 'sampleExcel' + '.xlsx';
             var fullpath = __dirname + '/Reports/' + filename;
             workbook.xlsx.writeFile('./Reports/' + filename).then(function () {
