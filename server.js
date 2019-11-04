@@ -1,5 +1,5 @@
 const ExcelJS = require('exceljs');
-const Excel = require('exceljs/modern.nodejs');
+const Excel = require('exceljs/lib/exceljs.nodejs');
 const express = require('express');
 var bodyParser = require('body-parser');
 const swaggerJsDoc = require('swagger-jsdoc');
