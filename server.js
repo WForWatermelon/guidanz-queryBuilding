@@ -417,6 +417,8 @@ var get_Esquery = function (metaData, download_type) {
  *       properties:
  *          index_name:
  *             type: string
+ *          size:
+ *             type: number
  */
 
 /**
@@ -427,13 +429,18 @@ var get_Esquery = function (metaData, download_type) {
  *     produces:
  *       - application/xlsx
  *     parameters:
- *       - name: id
+ *       - name: body
  *         description: data to post
  *         in: body
  *         required: true
  *         schema:
  *           $ref: '#/definitions/index'
  *           type: object
+ *         properties:
+ *           index_name:
+ *             type: string
+ *           size:
+ *             type: number
  *     responses:
  *       200:
  *         description: success
@@ -443,7 +450,7 @@ var get_Esquery = function (metaData, download_type) {
  */
 
 app.post('/api/v1/basic/excel', function (req, res) {
-   get_ES_without_aggs(req.body.index_name, 'excel').then(result => {
+   get_ES_without_aggs(req.body.index_name, req.body.size, 'excel').then(result => {
       if (result.status == "success") {
          console.log('File created successfully\nFilename:' + result.fileName + '\nPath:' + result.path);
          // res.send('File created successfully\nFilename:' + result.fileName + '\nPath:' + result.path);
@@ -478,7 +485,7 @@ app.post('/api/v1/basic/excel', function (req, res) {
  */
 
 app.post('/api/v1/basic/csv', function (req, res) {
-   get_ES_without_aggs(req.body.index_name, 'csv').then(result => {
+   get_ES_without_aggs(req.body.index_name, req.body.size, 'csv').then(result => {
       console.log(req.body.index)
       if (result.status == "success") {
          console.log('File created successfully\nFilename:' + result.fileName + '\nPath:' + result.path);
@@ -490,7 +497,7 @@ app.post('/api/v1/basic/csv', function (req, res) {
 
 
 
-var get_ES_without_aggs = function (index, download_type) {
+var get_ES_without_aggs = function (index, size, download_type) {
    console.log('hihihihi', index);
 
    return new Promise((resolve, reject) => {
@@ -508,8 +515,8 @@ var get_ES_without_aggs = function (index, download_type) {
 
       elasticClient.search(
          {
-            index: "." + index + "*",
-            size: 5000
+            index: index,
+            size: size
          }
       ).then(function (resp) {
          console.log('Please wait while computing the execution time');
