@@ -1,3 +1,4 @@
+
 const ExcelJS = require('exceljs');
 //test git
 const Excel = require('exceljs/lib/exceljs.nodejs');
@@ -5,6 +6,8 @@ const express = require('express');
 var bodyParser = require('body-parser');
 const swaggerJsDoc = require('swagger-jsdoc');
 const swaggerui = require('swagger-ui-express');
+var moment = require('moment');
+var nodemon = require('nodemon');
 const esUrl = "localhost:9200";
 const swaggerOptions = {
    swaggerDefinition: {
@@ -112,86 +115,389 @@ var get_Esquery = function (metaData, download_type) {
       var elasticClient = new elasticsearch.Client({
          host: esUrl
       });
-
+      var ID2 = [];
       //var metaData = { "title": "data-table3", "type": "table", "params": { "dimensions": { "metrics": [{ "accessor": 0, "format": { "id": "number" }, "params": {}, "aggType": "avg" }], "buckets": [] }, "perPage": 10, "showMetricsAtAllLevels": false, "showPartialRows": false, "showTotal": false, "sort": { "columnIndex": null, "direction": null }, "totalFunc": "sum" }, "aggs": [{ "id": "3", "enabled": true, "type": "count", "schema": "metric", "params": {} }, { "id": "4", "enabled": true, "type": "terms", "schema": "bucket", "params": { "field": "age", "orderBy": "_key", "order": "desc", "size": 1000, "otherBucket": false, "otherBucketLabel": "Other", "missingBucket": false, "missingBucketLabel": "Missing" } }] }
-
-      if (metaData.aggs[0].type == "count") {
-         if (metaData.aggs.length > 1) {
-
-            var aggs = {};
-            aggs.order = {
-            }
-            var orderBy = metaData.aggs[1].params.orderBy;
-            if (orderBy == metaData.aggs[0].id) {
-               aggs.order['_' + metaData.aggs[0].type] = metaData.aggs[1].params.order;
-
-            }
-            else {
-               aggs.order[metaData.aggs[1].params.orderBy] = metaData.aggs[1].params.order;
-            }
-            var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
-               order: aggs.order,
-               size: metaData.aggs[1].params.size
-            }).build();
-         }
-         else {
-            var body = {
-               aggs: {
+      if (metaData.aggs.length == 1) {
+         switch (metaData.aggs[0].type) {
+            case "count":
+               var body = {
+                  aggs: {
+                  }
                }
-            }
+               break;
+            case "median":
+               var body = bodybuilder()
+                  .aggregation('percentiles', metaData.aggs[0].params.field, {
+                     percents: [50], keyed: false
+                  }, metaData.aggs[0].id)
+                  .build();
+               break;
+
+            case "std_dev":
+               var body = bodybuilder()
+                  .aggregation('extended_stats', metaData.aggs[0].params.field, metaData.aggs[0].id)
+                  .build();
+               break;
+
+            case "percentiles":
+               var body = bodybuilder()
+                  .aggregation(metaData.aggs[0].type, metaData.aggs[0].params.field, {
+                     percents: metaData.aggs[0].params.percents, keyed: false
+                  }, metaData.aggs[0].id)
+                  .build();
+               break;
+
+            case "percentile_ranks":
+               var body = bodybuilder()
+                  .aggregation(metaData.aggs[0].type, metaData.aggs[0].params.field, {
+                     values: metaData.aggs[0].params.values, keyed: false
+                  }, metaData.aggs[0].id)
+                  .build();
+               break;
+
+            case 'top_hits':
+               var aggs = {};
+               var sortField = metaData.aggs[0].params.sortField
+               aggs[sortField] = { order: metaData.aggs[0].params.sortOrder }
+               var body = bodybuilder()
+                  .aggregation('top_hits', {
+                     docvalue_fields: [{
+                        field: metaData.aggs[0].params.field,
+                        format: 'use_field_mapping'
+                     }],
+                     _source: metaData.aggs[0].params.field,
+                     size: metaData.aggs[0].params.size,
+                     sort: [
+                        aggs
+                     ]
+                  }, metaData.aggs[0].id)
+                  .build();
+               break;
+
+            default://avg,max,min, sum,unique count
+               var body = bodybuilder().aggregation(metaData.aggs[0].type, metaData.aggs[0].params.field, metaData.aggs[0].id)
+                  .build();
+
          }
       }
-      else if (metaData.aggs[0].type == "median") {
-         var body = bodybuilder()
-            .aggregation('percentiles', metaData.aggs[0].params.field, {
-               percents: [50], keyed: false
-            }, metaData.aggs[0].id)
-            .build();
-      }
-      else if (metaData.aggs[0].type == "std_dev") {
-         var body = bodybuilder()
-            .aggregation('extended_stats', metaData.aggs[0].params.field, metaData.aggs[0].id)
-            .build();
-      }
-      else if (metaData.aggs[0].type == "percentiles") {
-         var body = bodybuilder()
-            .aggregation(metaData.aggs[0].type, metaData.aggs[0].params.field, {
-               percents: metaData.aggs[0].params.percents, keyed: false
-            }, metaData.aggs[0].id)
-            .build();
-      }
-      else if (metaData.aggs[0].type == "percentile_ranks") {
-         var body = bodybuilder()
-            .aggregation(metaData.aggs[0].type, metaData.aggs[0].params.field, {
-               values: metaData.aggs[0].params.values, keyed: false
-            }, metaData.aggs[0].id)
-            .build();
-      }
-      else if (metaData.aggs[0].type == 'top_hits') {
+      else {//aggs.length>1
+
          var aggs = {};
-         var sortField = metaData.aggs[0].params.sortField
-         aggs[sortField] = { order: metaData.aggs[0].params.sortOrder }
-         var body = bodybuilder()
-            .aggregation('top_hits', {
-               docvalue_fields: [{
-                  field: metaData.aggs[0].params.field,
-                  format: 'use_field_mapping'
-               }],
-               _source: metaData.aggs[0].params.field,
-               size: metaData.aggs[0].params.size,
-               sort: [
-                  aggs
-               ]
-            }, metaData.aggs[0].id)
-            .build();
+         aggs.order = {
+         }
+         switch (metaData.aggs[0].type) {
+            case 'count':
+               if (metaData.aggs[1].type == 'terms') {
+                  var orderBy = metaData.aggs[1].params.orderBy;
+                  if (orderBy == 'custom') {
+                     if (metaData.aggs[1].params.orderAgg.type == 'count') {
+                        aggs.order['_' + metaData.aggs[0].type] = metaData.aggs[1].params.order;
+                        var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                           order: aggs.order,
+                           size: metaData.aggs[1].params.size
+                        }).build();
+                     }
+                     else {
+                        aggs.order[metaData.aggs[1].params.orderAgg.id] = metaData.aggs[1].params.order;
+                        var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                           order: aggs.order,
+                           size: metaData.aggs[1].params.size
+                        }, agg => agg.aggregation(metaData.aggs[1].params.orderAgg.type, metaData.aggs[1].params.orderAgg.params.field, metaData.aggs[1].params.orderAgg.id)).build();
+
+                     }
+                  }
+                  else if (orderBy == metaData.aggs[0].id) {
+                     aggs.order['_' + metaData.aggs[0].type] = metaData.aggs[1].params.order;
+                     var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                        order: aggs.order,
+                        size: metaData.aggs[1].params.size
+                     }).build();
+
+                  }
+                  else if (orderBy == "_key") {
+                     aggs.order[metaData.aggs[1].params.orderBy] = metaData.aggs[1].params.order;
+                     var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                        order: aggs.order,
+                        size: metaData.aggs[1].params.size
+                     }).build();
+                  }
+
+               }
+               else {//if buckets!=terms
+                  switch (metaData.aggs[1].type) {
+                     case 'date_histogram':
+                        var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                           calendar_interval: "1w",
+                           time_zone: "Asia/Calcutta",
+                           min_doc_count: metaData.aggs[1].params.min_doc_count
+                        }).build();
+                        break;
+
+                     case 'date_range':
+                        var ranges = metaData.aggs[1].params.ranges;
+                        var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                           ranges: ranges,
+                           time_zone: "Asia/Calcutta"
+                        }).build();
+                        break;
+
+                     case 'range':
+                        var ranges = metaData.aggs[1].params.ranges;
+                        var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                           ranges: ranges,
+                           keyed: 'true'
+                        }).build();
+                        break;
+
+                     case 'geohash_grid':
+                     case "geotile_grid":
+                        var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                           precision: metaData.aggs[1].params.precision
+                        }, agg => agg.aggregation('geo_centroid', metaData.aggs[1].params.field, metaData.aggs[1].id + '1')).build();
+                        break;
+
+                     case "histogram":
+                        var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                           interval: metaData.aggs[1].params.interval,
+                           min_doc_count: "1"
+                        }).build();
+                        break;
+                     //two more cases to be added here namely significant termns and filters
+                     default:
+                        if (metaData.aggs[1].params.ipRangeType == 'fromTo') {
+                           var ranges = metaData.aggs[1].params.ranges.fromTo;
+                           var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                              ranges: ranges
+                           }).build();
+                        }
+                        else {
+                           var ranges = metaData.aggs[1].params.ranges.mask;
+                           var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                              ranges: ranges
+                           }).build();
+                        }
+                        break;
+                  }
+               }
+               break;
+
+            case 'avg':
+            case 'max':
+            case 'min':
+            case 'sum':
+            case 'cardinality':
+               if (metaData.aggs[1].type == 'terms') {
+                  var orderBy = metaData.aggs[1].params.orderBy;
+                  if (orderBy == 'custom') {
+                     if (metaData.aggs[1].params.orderAgg.type == 'count') {
+                        aggs.order['_' + metaData.aggs[1].params.orderAgg.type] = metaData.aggs[1].params.order;
+                        var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                           order: aggs.order,
+                           size: metaData.aggs[1].params.size
+                        }, agg => agg.aggregation(metaData.aggs[0].type, metaData.aggs[0].params.field, metaData.aggs[0].id)).build();
+                     }
+                     else {
+                        aggs.order[metaData.aggs[1].params.orderAgg.id] = metaData.aggs[1].params.order;
+                        var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                           order: aggs.order,
+                           size: metaData.aggs[1].params.size
+                        }, agg => agg.aggregation(metaData.aggs[0].type, metaData.aggs[0].params.field, metaData.aggs[0].id)
+                           .aggregation(metaData.aggs[1].params.orderAgg.type, metaData.aggs[1].params.orderAgg.params.field, metaData.aggs[1].params.orderAgg.id)).build();
+                     }
+
+
+                  }
+                  else if (orderBy == metaData.aggs[0].id) {
+                     aggs.order[metaData.aggs[0].id] = metaData.aggs[1].params.order;
+                     var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                        order: aggs.order,
+                        size: metaData.aggs[1].params.size
+                     }, agg => agg.aggregation(metaData.aggs[0].type, metaData.aggs[0].params.field, metaData.aggs[0].id)).build();
+
+                  }
+                  else {
+                     aggs.order[metaData.aggs[1].params.orderBy] = metaData.aggs[1].params.order;
+                     var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                        order: aggs.order,
+                        size: metaData.aggs[1].params.size
+                     }, agg => agg.aggregation(metaData.aggs[0].type, metaData.aggs[0].params.field, metaData.aggs[0].id)).build();
+                  }
+
+               }
+               break;
+
+            case 'std_dev':
+               if (metaData.aggs[1].type == 'terms') {
+                  var orderBy = metaData.aggs[1].params.orderBy;
+                  if (orderBy == 'custom') {
+                     if (metaData.aggs[1].params.orderAgg.type == 'count') {
+                        aggs.order['_' + metaData.aggs[1].params.orderAgg.type] = metaData.aggs[1].params.order;
+                        var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                           order: aggs.order,
+                           size: metaData.aggs[1].params.size
+                        }, agg => agg.aggregation('extended_stats', metaData.aggs[0].params.field, metaData.aggs[0].id)).build();
+                     }
+                     else {
+                        aggs.order[metaData.aggs[1].params.orderAgg.id] = metaData.aggs[1].params.order;
+                        var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                           order: aggs.order,
+                           size: metaData.aggs[1].params.size
+                        }, agg => agg.aggregation('extended_stats', metaData.aggs[0].params.field, metaData.aggs[0].id)
+                           .aggregation(metaData.aggs[1].params.orderAgg.type, metaData.aggs[1].params.orderAgg.params.field, metaData.aggs[1].params.orderAgg.id)).build();
+                     }
+                  }
+                  else {
+                     aggs.order[metaData.aggs[1].params.orderBy] = metaData.aggs[1].params.order;
+                     var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                        order: aggs.order,
+                        size: metaData.aggs[1].params.size
+                     }, agg => agg.aggregation('extended_stats', metaData.aggs[0].params.field, metaData.aggs[0].id))
+                        .build();
+                  }
+               }
+               break;
+
+            case 'median':
+            case 'percentiles':
+               var orderBy = metaData.aggs[1].params.orderBy;
+               if (orderBy == 'custom') {
+                  if (metaData.aggs[1].params.orderAgg.type == 'count') {
+                     aggs.order['_' + metaData.aggs[1].params.orderAgg.type] = metaData.aggs[1].params.order;
+                     var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                        order: aggs.order,
+                        size: metaData.aggs[1].params.size
+                     }, agg => agg.aggregation('percentiles', metaData.aggs[0].params.field, {
+                        percents: metaData.aggs[0].params.percents, keyed: false
+                     }, metaData.aggs[0].id)).build();
+                  }
+                  else {
+                     aggs.order[metaData.aggs[1].params.orderAgg.id] = metaData.aggs[1].params.order;
+                     var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                        order: aggs.order,
+                        size: metaData.aggs[1].params.size
+                     }, agg => agg.aggregation('percentiles', metaData.aggs[0].params.field, {
+                        percents: metaData.aggs[0].params.percents, keyed: false
+                     }, metaData.aggs[0].id)
+                        .aggregation(metaData.aggs[1].params.orderAgg.type, metaData.aggs[1].params.orderAgg.params.field, metaData.aggs[1].params.orderAgg.id)).build();
+                  }
+               }
+               else {
+                  aggs.order[metaData.aggs[1].params.orderBy] = metaData.aggs[1].params.order;
+                  var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                     order: aggs.order,
+                     size: metaData.aggs[1].params.size
+                  }, agg => agg.aggregation('percentiles', metaData.aggs[0].params.field, {
+                     percents: metaData.aggs[0].params.percents, keyed: false
+                  }, metaData.aggs[0].id)).build();
+               }
+               break;
+
+            case 'percentile_ranks':
+               var orderBy = metaData.aggs[1].params.orderBy;
+               if (orderBy == 'custom') {
+                  if (metaData.aggs[1].params.orderAgg.type == 'count') {
+                     aggs.order['_' + metaData.aggs[1].params.orderAgg.type] = metaData.aggs[1].params.order;
+                     var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                        order: aggs.order,
+                        size: metaData.aggs[1].params.size
+                     }, agg => agg.aggregation('percentile_ranks', metaData.aggs[0].params.field, {
+                        values: metaData.aggs[0].params.values, keyed: false
+                     }, metaData.aggs[0].id)).build();
+                  }
+                  else {
+                     aggs.order[metaData.aggs[1].params.orderAgg.id] = metaData.aggs[1].params.order;
+                     var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                        order: aggs.order,
+                        size: metaData.aggs[1].params.size
+                     }, agg => agg.aggregation('percentile_ranks', metaData.aggs[0].params.field, {
+                        values: metaData.aggs[0].params.values, keyed: false
+                     }, metaData.aggs[0].id)
+                        .aggregation(metaData.aggs[1].params.orderAgg.type, metaData.aggs[1].params.orderAgg.params.field, metaData.aggs[1].params.orderAgg.id)).build();
+                  }
+               }
+               else {
+                  // if (metaData.aggs[1].params.orderBy == '_key') {
+                  aggs.order[metaData.aggs[1].params.orderBy] = metaData.aggs[1].params.order;
+                  var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                     order: aggs.order,
+                     size: metaData.aggs[1].params.size
+                  }, agg => agg.aggregation('percentile_ranks', metaData.aggs[0].params.field, {
+                     values: metaData.aggs[0].params.values, keyed: false
+                  }, metaData.aggs[0].id)).build();
+               }
+               break;
+
+            case 'top_hits':
+               var aggs1 = {};
+               var sortField = metaData.aggs[0].params.sortField
+               aggs1[sortField] = { order: metaData.aggs[0].params.sortOrder }
+               var orderBy = metaData.aggs[1].params.orderBy;
+               if (orderBy == 'custom') {
+                  if (metaData.aggs[1].params.orderAgg.type == 'count') {
+                     aggs.order['_' + metaData.aggs[1].params.orderAgg.type] = metaData.aggs[1].params.order;
+                     var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                        order: aggs.order,
+                        size: metaData.aggs[1].params.size
+                     }, agg => agg.aggregation('top_hits', {
+                        docvalue_fields: [{
+                           field: metaData.aggs[0].params.field,
+                           format: 'use_field_mapping'
+                        }],
+                        _source: metaData.aggs[0].params.field,
+                        size: metaData.aggs[0].params.size,
+                        sort: [
+                           aggs1
+                        ]
+                     }, metaData.aggs[0].id))
+                        .build();
+                  }
+                  else {
+                     aggs.order[metaData.aggs[1].params.orderAgg.id] = metaData.aggs[1].params.order;
+                     var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                        order: aggs.order,
+                        size: metaData.aggs[1].params.size
+                     }, agg => agg.aggregation('top_hits', {
+                        docvalue_fields: [{
+                           field: metaData.aggs[0].params.field,
+                           format: 'use_field_mapping'
+                        }],
+                        _source: metaData.aggs[0].params.field,
+                        size: metaData.aggs[0].params.size,
+                        sort: [
+                           aggs1
+                        ]
+                     }, metaData.aggs[0].id).aggregation(metaData.aggs[1].params.orderAgg.type, metaData.aggs[1].params.orderAgg.params.field, metaData.aggs[1].params.orderAgg.id)).build();
+                  }
+               }
+               else {
+                  // if (metaData.aggs[1].params.orderBy == '_key') {
+                  aggs.order[metaData.aggs[1].params.field] = metaData.aggs[1].params.order;
+                  var body = bodybuilder().aggregation(metaData.aggs[1].type, metaData.aggs[1].params.field, metaData.aggs[1].id, {
+                     order: aggs.order,
+                     size: metaData.aggs[1].params.size
+                  }, agg => agg.aggregation('top_hits', {
+                     docvalue_fields: [{
+                        field: metaData.aggs[0].params.field,
+                        format: 'use_field_mapping'
+                     }],
+                     _source: metaData.aggs[0].params.field,
+                     size: metaData.aggs[0].params.size,
+                     sort: [
+                        aggs1
+                     ]
+                  }, metaData.aggs[0].id))
+                     .build();
+               }
+               break;
+            default:
+               console.log('iieieieieieieie');
+         }
       }
-      else {
-         var body = bodybuilder().aggregation(metaData.aggs[0].type, metaData.aggs[0].params.field, metaData.aggs[0].id)
-            .build();
-      }
+
+
       var query2 = {
          body: {
-            size: 100,
+            size: 0,
             track_total_hits: true,
             query: {
                bool: {
@@ -201,7 +507,7 @@ var get_Esquery = function (metaData, download_type) {
                            Timestamp: {
                               format: "strict_date_optional_time",
                               gte: "2018-10-23T06:14:21.272Z",
-                              lte: "2019-10-23T06:14:21.272Z"
+                              lte: "2019-11-04T06:14:21.272Z"
                            }
                         }
                      }
@@ -219,7 +525,6 @@ var get_Esquery = function (metaData, download_type) {
          }
       }
       console.log(JSON.stringify(query2));
-
       elasticClient.search(query2).then(function (resp) {
          workbook.creator = 'Me',
             workbook.lastModifiedBy = 'Him',
@@ -250,16 +555,18 @@ var get_Esquery = function (metaData, download_type) {
                   if (type1 == 'avg') {
                      var ID = 'Average ' + metaData.aggs[0].params.field;
                   }
-                  else if (metaData.aggs[0].type == 'median') {
-                     var ID = converter.toOrdinal(metaData.aggs[0].params.percents) + ' percentile of ' + metaData.aggs[0].params.field
+                  else if (type1 == 'percentiles') {
+                     if (metaData.aggs[0].type == 'median') {
+                        var ID = converter.toOrdinal(metaData.aggs[0].params.percents) + ' percentile of ' + metaData.aggs[0].params.field
+                     }
+                     else {
+                        var ID = metaData.aggs[0].params.percents;
+                     }
                   }
-                  else if (metaData.aggs[0].type == 'percentiles') {
-                     var ID = metaData.aggs[0].params.percents;
-                  }
-                  else if (metaData.aggs[0].type == 'percentile_ranks') {
+                  else if (type1 == 'percentile_ranks') {
                      var ID = metaData.aggs[0].params.values;
                   }
-                  else if (metaData.aggs[0].type == 'top_hits') {
+                  else if (type1 == 'top_hits') {
                      var ID = 'Last ' + metaData.aggs[0].params.size + ' ' + metaData.aggs[0].params.field;
                   }
                   else if (type1 == "sum") {
@@ -279,50 +586,84 @@ var get_Esquery = function (metaData, download_type) {
                      else {
                         ID1.push(metaData.aggs[1].params.field + ":Ascending");
                      }
+                     switch (metaData.aggs[0].type) {
+                        case 'count':
+                           ID1.push('Count');
+                           break;
+
+                        case 'avg':
+                           ID1.push('Average ' + metaData.aggs[0].params.field);
+                           break;
+
+                        case 'sum':
+                           ID1.push('Sum of ' + metaData.aggs[0].params.field);
+                           break;
+
+                        case 'max':
+                           ID1.push('Max ' + metaData.aggs[0].params.field);
+                           break;
+
+                        case 'min':
+                           ID1.push('Min ' + metaData.aggs[0].params.field);
+                           break;
+
+                        case 'cardinality':
+                           ID1.push('Unique count of ' + metaData.aggs[0].params.field);
+                           break;
+                        case 'std_dev':
+
+                           ID1.push('Lower standard Deviation of ' + metaData.aggs[0].params.field);
+                           ID1.push('Upper standard Deviation of ' + metaData.aggs[0].params.field);
+                           break;
+                        case 'median':
+                           ID2 = converter.toOrdinal(metaData.aggs[0].params.percents) + ' percentile of ' + metaData.aggs[0].params.field
+                           ID1.push(ID2);
+                           break;
+                        case 'percentiles':
+                           ID2 = metaData.aggs[0].params.percents;
+                           break;
+                        case 'percentile_ranks':
+                           ID1.push('Percentile rank ' + metaData.aggs[0].params.values + ' of ' + metaData.aggs[0].params.field);
+                           break;
+                        case 'top_hits':
+                           ID1.push('Last ' + metaData.aggs[0].params.field);
+                        default:
+                           console.log('hahahah');
+                     }
+                  }
+                  else if (type1 == "date_histogram") {
+                     ID1.push(metaData.aggs[1].params.field + " per week");
                      ID1.push('Count');
                   }
+                  else if (type1 == 'date_range') {
+                     ID1.push(metaData.aggs[1].params.field + " per ranges");
+                     ID1.push('Count');
+                  }
+                  else if (type1 == 'range') {
+                     ID1.push(metaData.aggs[1].params.field + " range");
+                     ID1.push('Count');
+                  }
+                  else if (type1 == 'geohash_grid' || type1 == 'geotile_grid') {
+                     ID1.push(metaData.aggs[1].type);
+                     ID1.push('Count');
+                  }
+                  else if (type1 == 'histogram') {
+                     ID1.push(metaData.aggs[1].params.field);
+                     ID1.push('Count');
+                  }
+                  else if (type1 == 'ip_range') {
+                     ID1.push(metaData.aggs[1].params.field + ' IP ranges');
+                     ID1.push('Count');
+                  }
+
                   else {
                      var ID = type1 + ' ' + metaData.aggs[0].params.field;
                   }
 
                }
             }
-            if (ID1.length != 0) {
-               let colArr = [];
-               for (let i in ID1) {
-                  colArr.push({ header: ID1[i], key: ID1[i], width: 30 });
-               }
-               sheet.columns = colArr;
-               for (const key in resp.aggregations) {
-                  var b = resp.aggregations[key];
-               }
-               if (metaData.aggs[0].type == 'std_dev') {
-                  sheet.addRow([b.std_deviation_bounds.lower, b.std_deviation_bounds.upper])
-               }
-               else {
-                  for (var i = 0; i < b.buckets.length; i++) {
-                     if (b.buckets[i].key == 1) {
-                        sheet.addRow(['true', b.buckets[i].doc_count]);
-                     }
-                     else if (b.buckets[i].key == 0) {
-                        sheet.addRow(['false', b.buckets[i].doc_count])
-                     }
-                     else {
-                        if (metaData.aggs[1].params.field == 'endedTime' || metaData.aggs[1].params.field == 'historicTimestamp' || metaData.aggs[1].params.field == 'startedTime' || metaData.aggs[1].params.field == 'Timestamp') {
-                           var _date = JSON.stringify(new Date(b.buckets[i].key));
-                           sheet.addRow([_date, b.buckets[i].doc_count]);
-                        }
-                        else {
-                           sheet.addRow([b.buckets[i].key, b.buckets[i].doc_count])
-                        }
 
-
-                     }
-
-                  }
-               }
-            }
-            else {
+            if (ID1.length == 0) {//if only metrics present
                if (typeof ID == 'object' && ID.length) {
                   let colArr = [];
                   if (metaData.aggs[0].type == 'percentile_ranks') {
@@ -350,21 +691,20 @@ var get_Esquery = function (metaData, download_type) {
                      sheet.addRow([b.value]);
                   }
                   else {
-                     var _date = JSON.stringify(new Date(b.value));
+                     var _date = moment(b.value).format('YYYY MM DD, h:mm:ss a');
                      sheet.addRow([_date]);
                   }
                }
                else if (metaData.aggs[0].type == 'percentiles') {
-                  var ID2 = [];
+
                   for (let i = 0; i < b.values.length; i++) {
                      ID2.push(b.values[i].value);
                   }
                   sheet.addRow(ID2);
                }
                else if (metaData.aggs[0].type == 'percentile_ranks') {
-                  var ID2 = [];
                   for (let i = 0; i < b.values.length; i++) {
-                     ID2.push(b.values[i].value);
+                     ID2.push(b.values[i].value + "%");
                   }
                   sheet.addRow(ID2);
                }
@@ -383,6 +723,307 @@ var get_Esquery = function (metaData, download_type) {
                }
                else {
                   sheet.addRow([b.value])
+               }
+            }
+            else {//if buckets also present
+               let colArr = [];
+               for (let i in ID1) {
+                  colArr.push({ header: ID1[i], key: ID1[i], width: 30 });
+               }
+               if (ID2.length) {
+                  for (let i in ID2) {
+                     colArr.push({ header: converter.toOrdinal(ID2[i]) + ' percentile of ' + metaData.aggs[0].params.field, key: converter.toOrdinal(ID2[i]), width: 30 });
+                  }
+               }
+               sheet.columns = colArr;
+               for (const key in resp.aggregations) {
+                  var b = resp.aggregations[key];
+               }
+               if (metaData.aggs[0].type == 'std_dev') {
+                  if (metaData.aggs.length == 1) {
+                     sheet.addRow([b.std_deviation_bounds.lower, b.std_deviation_bounds.upper]);
+                  }
+                  else {
+                     var bucket_arr = {};
+                     var lower_values = [];
+                     var upper_values = [];
+                     var keys = [];
+                     var c = function (bucket_arr) {
+                        if (bucket_arr.length == 0) {
+                           return 'stop';
+                        }
+                        else {
+                           var id = metaData.aggs[0].id;
+                           if (metaData.aggs[1].params.field == 'endedTime' || metaData.aggs[1].params.field == 'HistoricTimestamp' || metaData.aggs[1].params.field == 'startedTime' || metaData.aggs[1].params.field == 'Timestamp') {
+                              var _date = moment(b.buckets[0].key).format('MMM D, YYYY @ H:mm:ss.SSS');
+                              upper_values.push(bucket_arr[0][id].std_deviation_bounds.upper);
+                              lower_values.push(bucket_arr[0][id].std_deviation_bounds.lower);
+                              keys.push(_date);
+
+                           }
+                           else {
+                              var id = metaData.aggs[0].id;
+                              upper_values.push(bucket_arr[0][id].std_deviation_bounds.upper);
+                              lower_values.push(bucket_arr[0][id].std_deviation_bounds.lower);
+                              keys.push(bucket_arr[0].key);
+                           }
+                           bucket_arr.shift();
+                           c(bucket_arr);
+
+                        }
+
+                     }
+                     c(b.buckets);
+                     for (var i = 0; i < lower_values.length; i++) {
+                        sheet.addRow([keys[i], lower_values[i], upper_values[i]]);
+                     }
+
+                  }
+
+               }
+               else {
+                  switch (metaData.aggs[0].type) {
+                     case 'count':
+                        if (metaData.aggs[1].type == 'geohash_grid' || metaData.aggs[1].type == 'geotile_grid') {
+                           for (key in b) { var c = b[key]; }
+                           for (var i = 0; i < c.length; i++) {
+                              sheet.addRow([c[i].key, c[i].doc_count]);
+                           }
+                        }
+                        else if (metaData.aggs[1].type == "range") {
+                           console.log(metaData.aggs[1].type);
+                           for (key in b) {
+                              var c = b[key];
+                              for (key in c) {
+                                 sheet.addRow([c[key].from + ' to ' + c[key].to, c[key].doc_count]);
+                              }
+                           }
+                        }
+                        else {//everything other than range, geohash_grid and geotilegrid
+
+                           for (var i = 0; i < b.buckets.length; i++) {
+                              if (b.buckets[i].key == 1) {
+                                 sheet.addRow(['true', b.buckets[i].doc_count]);
+                              }//terms=flag
+                              else if (b.buckets[i].key == 0) {
+                                 sheet.addRow(['false', b.buckets[i].doc_count])
+                              }//terms=flag
+                              else {
+                                 //terms=date based
+                                 if (metaData.aggs[1].params.field == 'endedTime' || metaData.aggs[1].params.field == 'HistoricTimestamp' || metaData.aggs[1].params.field == 'startedTime' || metaData.aggs[1].params.field == 'Timestamp') {
+                                    if (metaData.aggs[1].type == "date_range") {
+                                       var from = moment(b.buckets[i].key.from).format('MMM D, YYYY @ H:mm:ss.SSS')
+                                       var to = moment(b.buckets[i].key.to).format('MMM D, YYYY @ H:mm:ss.SSS')
+                                       var _date = from + ' to ' + to;
+                                    }
+                                    else if (metaData.aggs[1].type == 'date_histogram') {
+                                       var _date = moment(b.buckets[i].key).format('YYYY-MM-DD')
+                                    }//type=date_histogram
+                                    else {
+                                       var _date = moment(b.buckets[i].key).format('MMM D, YYYY @ H:mm:ss.SSS');
+                                    }//terms
+
+                                    sheet.addRow([_date, b.buckets[i].doc_count]);
+                                 }
+                                 else {
+                                    sheet.addRow([b.buckets[i].key, b.buckets[i].doc_count])
+                                 }//field =string,IPV4 range
+
+
+                              }
+
+                           }
+                        }
+                        break;
+
+                     case 'avg':
+                     case 'max':
+                     case 'sum':
+                     case 'min':
+                     case 'cardinality':
+                        var bucket_arr = {};
+                        var values = []
+                        var keys = [];
+                        var c = function (bucket_arr) {
+                           if (bucket_arr.length == 0) {
+                              return 'stop';
+                           }
+                           else {
+                              var id = metaData.aggs[0].id;
+                              if (metaData.aggs[1].params.field == 'endedTime' || metaData.aggs[1].params.field == 'HistoricTimestamp' || metaData.aggs[1].params.field == 'startedTime' || metaData.aggs[1].params.field == 'Timestamp') {
+                                 var _date = moment(b.buckets[0].key).format('MMM D, YYYY @ H:mm:ss.SSS');
+                                 values.push(bucket_arr[0][id].value);
+                                 keys.push(_date);
+
+                              }
+                              else {
+                                 var id = metaData.aggs[0].id;
+                                 values.push(bucket_arr[0][id].value);
+                                 keys.push(bucket_arr[0].key);
+                              }
+                              bucket_arr.shift();
+                              c(bucket_arr);
+
+                           }
+                        }
+
+                        for (var key in resp.aggregations) {
+                           var b = resp.aggregations[key]
+                        }
+                        c(b.buckets);
+                        for (var i = 0; i < values.length; i++) {
+                           sheet.addRow([keys[i], values[i]]);
+                        }
+                        break;
+                     case 'median':
+                        var bucket_arr = {};
+                        var values = []
+                        var keys = [];
+                        var c = function (bucket_arr) {
+                           if (bucket_arr.length == 0) {
+                              return 'stop';
+                           }
+                           else {
+                              var id = metaData.aggs[0].id
+                              if (metaData.aggs[1].params.field == 'endedTime' || metaData.aggs[1].params.field == 'HistoricTimestamp' || metaData.aggs[1].params.field == 'startedTime' || metaData.aggs[1].params.field == 'Timestamp') {
+                                 var _date = moment(bucket_arr[0].key).format('MMM D, YYYY @ H:mm:ss.SSS');
+                                 values.push(bucket_arr[0][id].values[0].value);
+                                 keys.push(_date);
+
+                              }
+                              else {
+                                 values.push(bucket_arr[0][id].values[0].value);
+                                 keys.push(bucket_arr[0].key);
+                              }
+                              bucket_arr.shift();
+                              c(bucket_arr);
+                           }
+
+                        }
+
+                        for (var key in resp.aggregations) {
+                           var b = resp.aggregations[key]
+                        }
+                        c(b.buckets);
+                        for (var i = 0; i < values.length; i++) {
+                           sheet.addRow([keys[i], values[i]]);
+                        }
+                        break;
+                     case 'percentiles':
+                        var bucket_arr = {};
+                        var values = []
+                        var keys = [];
+                        var c = function (bucket_arr) {
+                           if (bucket_arr.length == 0) {
+                              return 'stop';
+                           }
+                           else {
+                              var id = metaData.aggs[0].id;
+                              if (metaData.aggs[1].params.field == 'endedTime' || metaData.aggs[1].params.field == 'HistoricTimestamp' || metaData.aggs[1].params.field == 'startedTime' || metaData.aggs[1].params.field == 'Timestamp') {
+                                 var _date = moment(bucket_arr[0].key).format('MMM D, YYYY @ H:mm:ss.SSS');
+                                 values.push(_date);
+                                 for (var i = 0; i < bucket_arr[0][id].values.length; i++) {
+                                    values.push(bucket_arr[0][id].values[i].value);
+                                 }
+                                 sheet.addRow(values);
+                                 values.length = 0;
+                                 keys.length = 0;
+                                 bucket_arr.shift();
+                                 c(bucket_arr);
+                              }
+                              else {
+                                 values.push(bucket_arr[0].key);
+                                 for (var i = 0; i < bucket_arr[0][id].values.length; i++) {
+                                    values.push(bucket_arr[0][id].values[i].value);
+                                 }
+                                 sheet.addRow(values);
+                                 values.length = 0;
+                                 keys.length = 0;
+                                 bucket_arr.shift();
+                                 c(bucket_arr);
+                              }
+
+                           }
+
+                        }
+
+                        for (var key in resp.aggregations) {
+                           var b = resp.aggregations[key]
+                        }
+                        c(b.buckets);
+                        break;
+
+                     case 'percentile_ranks':
+                        var bucket_arr = {};
+                        var values = []
+                        var keys = [];
+                        var c = function (bucket_arr) {
+                           if (bucket_arr.length == 0) {
+                              return 'stop';
+                           }
+                           else {
+                              var id = metaData.aggs[0].id;
+                              if (metaData.aggs[1].params.field == 'endedTime' || metaData.aggs[1].params.field == 'HistoricTimestamp' || metaData.aggs[1].params.field == 'startedTime' || metaData.aggs[1].params.field == 'Timestamp') {
+                                 var _date = moment(b.buckets[0].key).format('MMM D, YYYY @ H:mm:ss.SSS');
+                                 values.push(bucket_arr[0][id].values[0].value + '%');
+                                 keys.push(_date);
+
+                              }
+                              else {
+                                 values.push(bucket_arr[0][id].values[0].value + '%');
+                                 keys.push(bucket_arr[0].key);
+                              }
+                              bucket_arr.shift();
+                              c(bucket_arr);
+
+                           }
+                        }
+                        for (var key in resp.aggregations) {
+                           var b = resp.aggregations[key]
+                        }
+                        c(b.buckets);
+                        for (var i = 0; i < values.length; i++) {
+                           sheet.addRow([keys[i], values[i]]);
+                        }
+                        break;
+                     case 'top_hits':
+                        var bucket_arr = {};
+                        var values = [];
+                        var keys = [];
+                        var c = function (bucket_arr) {
+                           if (bucket_arr.length == 0) {
+                              return 'stop';
+                           }
+                           else {
+                              var id = metaData.aggs[0].id
+                              var field = metaData.aggs[0].params.field;
+                              if (metaData.aggs[1].params.field == 'endedTime' || metaData.aggs[1].params.field == 'HistoricTimestamp' || metaData.aggs[1].params.field == 'startedTime' || metaData.aggs[1].params.field == 'Timestamp') {
+                                 var _date = moment(bucket_arr[0].key).format('MMM D, YYYY @ H:mm:ss.SSS');
+                                 values.push(bucket_arr[0][id].hits.hits[0]._source[field]);
+                                 keys.push(_date);
+
+                              }
+                              else {
+                                 values.push(bucket_arr[0][id].hits.hits[0]._source[field]);
+                                 keys.push(bucket_arr[0].key);
+                              }
+                              bucket_arr.shift();
+                              c(bucket_arr);
+                           }
+
+                        }
+
+                        for (var key in resp.aggregations) {
+                           var b = resp.aggregations[key]
+                        }
+                        c(b.buckets);
+                        for (var i = 0; i < values.length; i++) {
+                           sheet.addRow([keys[i], values[i]]);
+                        }
+                        break;
+
+                  }
+
                }
             }
          }

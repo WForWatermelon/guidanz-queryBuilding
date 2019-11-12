@@ -16,6 +16,8 @@
     "exceljs": "^3.3.0",
     "express": "^4.17.1",
     "json-schema-to-es-mapping": "^0.3.6",
+    "modern": "^1.0.2",
+    "moment": "^2.24.0",
     "nodemon": "^1.19.4",
     "number-to-words": "^1.2.4",
     "swagger-jsdoc": "^3.4.0",
