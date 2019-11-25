@@ -14,7 +14,6 @@ var get_Esquery = function (metaData, download_type) {
          host: esUrl
       });
       var status = false;
-      var last_id = 0;
       var metrics = [];
       var buckets = {};
       var bucket_list = [];
@@ -47,14 +46,12 @@ var get_Esquery = function (metaData, download_type) {
                      percents: metrics[i].params.percents, keyed: false
                   }, metrics[i].id)
                   .build();
-               last_id = metrics[i].id;
                break;
 
             case "std_dev":
                var body = bodybuilder()
                   .aggregation('extended_stats', metrics[i].params.field, metrics[i].id)
                   .build();
-               last_id = metrics[i].id;
                break;
 
 
@@ -64,7 +61,6 @@ var get_Esquery = function (metaData, download_type) {
                      values: metrics[i].params.values, keyed: false
                   }, metrics[i].id)
                   .build();
-               last_id = metrics[i].id;
                break;
 
             case 'top_hits':
@@ -84,18 +80,16 @@ var get_Esquery = function (metaData, download_type) {
                      ]
                   }, metrics[i].id)
                   .build();
-               last_id = metrics[i].id;
                break;
 
             default://avg,max,min, sum,unique count
                var body = bodybuilder().aggregation(metrics[i].type, metrics[i].params.field, metrics[i].id)
                   .build();
-               last_id = metrics[i].id;
 
          }
          metrics_data['aggs'] = Object.assign(metrics_data.aggs, body.aggs);
       }
-      last_id = (parseInt(last_id) + 1).toString();
+      var last_id = (parseInt(bucket_list[bucket_list.length - 1].id) + 1).toString();
 
       var func = function (main_body, curr_body, buckets) {
          var curr_type = '';
@@ -214,6 +208,7 @@ var get_Esquery = function (metaData, download_type) {
                         break;
 
                      case "histogram":
+                        console.log('hihih');
                         curr_body[curr_type] = bodybuilder().aggregation(curr_type, c.field, curr_id, {
                            interval: c.interval,
                            min_doc_count: "1"
@@ -308,7 +303,7 @@ var get_Esquery = function (metaData, download_type) {
                   must: [
                      {
                         range: {
-                           Timestamp: {
+                           '@timestamp': {
                               format: "strict_date_optional_time",
                               gte: "2018-10-23T06:14:21.272Z",
                               lte: "2019-11-04T06:14:21.272Z"
@@ -352,34 +347,37 @@ var get_Esquery = function (metaData, download_type) {
             switch (bucket_list[i].type) {
                case 'terms':
                   if (bucket_list[i].params.order == "desc") {
-                     col_list.push({ key: bucket_list[i].params.field + ':Descending', id: bucket_list[i].id });
+                     col_list.push({ key: bucket_list[i].params.field + ':Descending', id: bucket_list[i].id, type: bucket_list[i].type });
                   }
                   else {
-                     col_list.push({ key: bucket_list[i].params.field + ":Ascending", id: bucket_list[i].id });
+                     col_list.push({ key: bucket_list[i].params.field + ":Ascending", id: bucket_list[i].id, type: bucket_list[i].type });
                   }
                   break;
 
                case 'date_histogram':
-                  col_list.push({ key: bucket_list[i].params.field + " per week", id: bucket_list[i].id });
+                  col_list.push({ key: bucket_list[i].params.field + " per week", id: bucket_list[i].id, type: bucket_list[i].type });
                   break;
 
                case 'date_range':
-                  col_list.push({ key: bucket_list[i].params.field + " per ranges", id: bucket_list[i].id });
+                  col_list.push({ key: bucket_list[i].params.field + " per ranges", id: bucket_list[i].id, type: bucket_list[i].type });
                   break;
 
                case 'range':
-                  col_list.push({ key: bucket_list[i].params.field + " range", id: bucket_list[i].id });
+                  col_list.push({ key: bucket_list[i].params.field + " range", id: bucket_list[i].id, type: bucket_list[i].type });
                   break;
 
                case 'geohash_grid':
                case 'geotile_grid':
-                  col_list.push({ key: bucket_list[i].type, id: bucket_list[i].id });
+                  col_list.push({ key: bucket_list[i].type, id: bucket_list[i].id, type: bucket_list[i].type });
                   break;
 
                case 'histogram':
-                  col_list.push({ key: bucket_list[i].params.field + ' IP ranges', id: bucket_list[i].id });
+                  col_list.push({ key: bucket_list[i].params.field, id: bucket_list[i].id, type: bucket_list[i].type });
                   break;
 
+               case 'ip_range':
+                  col_list.push({ key: bucket_list[i].params.field + ' IP ranges', id: bucket_list[i].id, type: bucket_list[i].type });
+                  break;
                default:
                   console.log('hi look here');
                   break;
@@ -388,51 +386,51 @@ var get_Esquery = function (metaData, download_type) {
          for (let i = 0; i < metrics.length; i++) {
             switch (metrics[i].type) {
                case 'count':
-                  col_list.push({ key: 'Count', id: metrics[i].id });
+                  col_list.push({ key: 'Count', id: metrics[i].id, type: bucket_list[i].type });
                   break;
 
                case 'avg':
-                  col_list.push({ key: 'Average ' + metrics[i].params.field, id: metrics[i].id });
+                  col_list.push({ key: 'Average ' + metrics[i].params.field, id: metrics[i].id, type: metrics[i].type });
                   break;
 
                case 'sum':
-                  col_list.push({ key: 'Sum of ' + metrics[i].params.field, id: metrics[i].id });
+                  col_list.push({ key: 'Sum of ' + metrics[i].params.field, id: metrics[i].id, type: metrics[i].type });
                   break;
 
                case 'max':
-                  col_list.push({ key: 'Max ' + metrics[i].params.field, id: metrics[i].id });
+                  col_list.push({ key: 'Max ' + metrics[i].params.field, id: metrics[i].id, type: metrics[i].type });
                   break;
 
                case 'min':
-                  col_list.push({ key: 'Min ' + metrics[i].params.field, id: metrics[i].id });
+                  col_list.push({ key: 'Min ' + metrics[i].params.field, id: metrics[i].id, type: metrics[i].type });
                   break;
 
                case 'cardinality':
-                  col_list.push({ key: 'Unique count of ' + metrics[i].params.field, id: metrics[i].id });
+                  col_list.push({ key: 'Unique count of ' + metrics[i].params.field, id: metrics[i].id, type: metrics[i].type });
                   break;
 
                case 'std_dev':
-                  col_list.push({ key: 'Lower Standard Deviation of ' + metrics[i].params.field, id: metrics[i].id });
-                  col_list.push({ key: 'Upper Standard Deviation of ' + metrics[i].params.field, id: metrics[i].id });
+                  col_list.push({ key: 'Lower Standard Deviation of ' + metrics[i].params.field, id: metrics[i].id, type: metrics[i].type });
+                  col_list.push({ key: 'Upper Standard Deviation of ' + metrics[i].params.field, id: metrics[i].id, type: metrics[i].type });
                   break;
 
                case 'top_hits':
-                  col_list.push({ key: 'Last ' + metrics[i].params.field, id: metrics[i].id });
+                  col_list.push({ key: 'Last ' + metrics[i].params.field, id: metrics[i].id, type: metrics[i].type });
                   break;
 
                case 'percentile_ranks':
-                  col_list.push({ key: 'Percentile rank ' + metrics[i].params.values + ' of ' + metrics[i].params.field, id: metrics[i].id });
+                  col_list.push({ key: 'Percentile rank ' + metrics[i].params.values + ' of ' + metrics[i].params.field, id: metrics[i].id, type: metrics[i].type });
                   break;
 
                case 'median':
                   ID2 = converter.toOrdinal(metrics[i].params.percents) + ' percentile of ' + metrics[i].params.field;
-                  col_list.push({ key: ID2, id: metrics[i].id });
+                  col_list.push({ key: ID2, id: metrics[i].id, type: metrics[i].type });
                   break;
 
                case 'percentiles':
                   for (let j = 0; j < metrics[i].params.percents.length; j++) {
                      ID2 = converter.toOrdinal(metrics[i].params.percents[j]) + ' percentile of ' + metrics[i].params.field
-                     col_list.push({ key: ID2, id: metrics[i].id });
+                     col_list.push({ key: ID2, id: metrics[i].id, type: metrics[i].type });
                   }
                   break;
 
@@ -451,7 +449,28 @@ var get_Esquery = function (metaData, download_type) {
          console.log('collist:', col_list);
          for (let i = 0; i < result.length; i++) {
             for (let j = 0; j < col_list.length; j++) {
-               rowArr.push(result[i][col_list[j].id]);
+               if (col_list[j].key.match('Timestamp') || col_list[j].key.match('endedTime') || col_list[j].key.match('HistoricTimestamp') || col_list[j].key.match('startedTime') || col_list[j].key.match('@timestamp') || col_list[j].key.match('relatedContent.article: modified_time')) {
+                  if (col_list[j].type == 'date_range') {
+                     var _str = result[i][col_list[j].id].split('Z-');
+                     _str[0] = _str[0] + 'Z';
+                     var from = moment(_str[0]).format('MMM D, YYYY @ H:mm:ss.SSS');
+                     var to = moment(_str[1]).format('MMM D, YYYY @ H:mm:ss.SSS');
+                     var _date = from + 'to' + to;
+
+                  }
+                  else if (col_list[j].type == 'date_histogram') {
+                     var _date = moment(result[i][col_list[j].id]).format('YYYY-MM-DD');
+                  }
+                  else {
+                     var _date = moment(result[i][col_list[j].id]).format('MMM D, YYYY @ H:mm:ss.SSS');
+                  }//terms
+                  rowArr.push(_date);
+
+               }
+               else {
+                  rowArr.push(result[i][col_list[j].id]);
+               }
+
             }
             sheet.addRow(rowArr);
             rowArr = [];
