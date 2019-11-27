@@ -7,9 +7,9 @@ var elasticsearch = require('elasticsearch/src/elasticsearch');
 var bodybuilder = require('bodybuilder');
 var converter = require('number-to-words');
 var serializer = require('./response.serializer');
-var get_Esquery = function (metaData, download_type) {
+var get_Esquery = function (dashboard_name, metaData, workbook, timeField, download_type) {
    return new Promise((resolve, reject) => {
-      var workbook = new Excel.Workbook();
+
       var elasticClient = new elasticsearch.Client({
          host: esUrl
       });
@@ -208,7 +208,6 @@ var get_Esquery = function (metaData, download_type) {
                         break;
 
                      case "histogram":
-                        console.log('hihih');
                         curr_body[curr_type] = bodybuilder().aggregation(curr_type, c.field, curr_id, {
                            interval: c.interval,
                            min_doc_count: "1"
@@ -303,7 +302,7 @@ var get_Esquery = function (metaData, download_type) {
                   must: [
                      {
                         range: {
-                           '@timestamp': {
+                           [timeField]: {
                               format: "strict_date_optional_time",
                               gte: "2018-10-23T06:14:21.272Z",
                               lte: "2019-11-04T06:14:21.272Z"
@@ -323,20 +322,9 @@ var get_Esquery = function (metaData, download_type) {
             aggs: main_body.aggs
          }
       }
-      console.log(JSON.stringify(query2));
+      console.log("\n\n\nQuery=======", JSON.stringify(query2));
       elasticClient.search(query2).then(function (resp) {
-         workbook.creator = 'Me',
-            workbook.lastModifiedBy = 'Him',
-            workbook.created = new Date(2019, 10, 3),
-            workbook.modified = new Date(),
-            workbook.lastPrinted = new Date(2019, 10, 1),
-            workbook.views = [
-               {
-                  x: 0, y: 0, width: 10000, height: 20000,
-                  firstSheet: 0, activeTab: 1, visibility: 'visible'
-               }
-            ]
-         var sheet = workbook.addWorksheet('My Sheet', { properties: { tabColor: { argb: 'FFC0000' } } });
+         var sheet = workbook.addWorksheet(metaData.title, { properties: { tabColor: { argb: 'FFC0000' } } });
          sheet.pageSetup.margins = {
             left: 0.7, right: 0.7,
             top: 0.75, bottom: 0.75,
@@ -445,11 +433,10 @@ var get_Esquery = function (metaData, download_type) {
          }
          sheet.columns = colArr;
          var result = serializer(resp);
-         console.log(result);
-         console.log('collist:', col_list);
+         // console.log('collist:', col_list);
          for (let i = 0; i < result.length; i++) {
             for (let j = 0; j < col_list.length; j++) {
-               if (col_list[j].key.match('Timestamp') || col_list[j].key.match('endedTime') || col_list[j].key.match('HistoricTimestamp') || col_list[j].key.match('startedTime') || col_list[j].key.match('@timestamp') || col_list[j].key.match('relatedContent.article: modified_time')) {
+               if (col_list[j].key.match('Timestamp') || col_list[j].key.match('endedTime') || col_list[j].key.match('HistoricTimestamp') || col_list[j].key.match('startedTime') || col_list[j].key.match('@timestamp') || col_list[j].key.match('timestamp') || col_list[j].key.match('relatedContent.article: modified_time')) {
                   if (col_list[j].type == 'date_range') {
                      var _str = result[i][col_list[j].id].split('Z-');
                      _str[0] = _str[0] + 'Z';
@@ -477,7 +464,8 @@ var get_Esquery = function (metaData, download_type) {
          }
          var date_time = new Date();
          if (download_type == "excel") {
-            var filename = metaData.title + '.xlsx';
+            var filename = dashboard_name + '.xlsx';
+            // console.log('dashboard name=', dashboard_name)
             var fullpath = __dirname + "/Reports/" + filename;
             workbook.xlsx.writeFile('./Reports/' + filename).then(function () {
                resolve({ status: 'success', Timestamp: date_time, path: fullpath, fileName: filename });
@@ -496,6 +484,6 @@ var get_Esquery = function (metaData, download_type) {
          reject(err.message);
       };
 
-   })
+   });
 }
 exports.get_Esquery = get_Esquery;
