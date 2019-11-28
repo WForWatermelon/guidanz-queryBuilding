@@ -21,13 +21,14 @@ var getVisualizationList = function (dashboard_name) {
             body: {
                query: {
                   match_phrase: {
-                     "_id": 'visualization:' + references[i].id
+                     "_id": references[i].type+':'+ references[i].id
                   }
                }
             }
          }
          await elasticClient.search(query1).then(function (resp1) {
-            viz_list.push({ [resp1.hits.hits[0]._source.visualization.title]: 'visualization:' + references[i].id });
+            let type=references[i].type;
+            viz_list.push({ [resp1.hits.hits[0]._source[type].title]: type+':' + references[i].id });
             // console.log(viz_list);
          })
       }

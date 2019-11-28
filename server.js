@@ -4,6 +4,7 @@ const get_ES_without_aggs = require('./utilFunctions/queryBuilding_basic');
 const getTimestamp = require('./utilFunctions/getTimefield');
 const getVizList = require('./utilFunctions/getVizList');
 const getMeta = require('./utilFunctions/getMetaData');
+const getDash=require('./utilFunctions/getDashboardList');
 const express = require('express');
 var bodyParser = require('body-parser');
 const swaggerJsDoc = require('swagger-jsdoc');
@@ -40,6 +41,28 @@ app.use(bodyParser.urlencoded({
    extended: true
 }));
 
+
+/**
+ * @swagger
+ * /api/v1/getDashboardList:
+*   get:
+ *     description: get all dashboards
+ *     produces:
+ *       - application/json
+ *     responses:
+ *       200:
+ *         description: success
+ *         schema:
+ *           type: file
+ *
+ */
+var dash_list=[];
+ app.get('/api/v1/getDashboardList',async function(req,res){
+   console.log('hooo');
+    dash_list=await getDash.getDashboardList();
+    res.send(dash_list);
+ })
+
 /**
  * @swagger
  * definitions:
@@ -52,7 +75,7 @@ app.use(bodyParser.urlencoded({
 
 /**
  * @swagger
- * /api/v1/getDashboard:
+ * /api/v1/getVisualizationList:
 *   post:
  *     description: Give dashboard name as input and get list of visualisations
  *     produces:
@@ -74,7 +97,7 @@ app.use(bodyParser.urlencoded({
  */
 let vis_list = [];
 let dashboard_name;
-app.post('/api/v1/getDashboard', async function (req, res) {
+app.post('/api/v1/getVisualizationList', async function (req, res) {
    dashboard_name = req.body.dashboard_name;
    vis_list = await getVizList.getVisualizationList(dashboard_name);
    res.send(vis_list);

@@ -1,8 +1,7 @@
-const ExcelJS = require('exceljs');
+// const ExcelJS = require('exceljs');
 const Excel = require('exceljs/lib/exceljs.nodejs');
 const esUrl = "localhost:9200";
 var moment = require('moment');
-var tuple = require('tuple');
 var elasticsearch = require('elasticsearch/src/elasticsearch');
 var bodybuilder = require('bodybuilder');
 var converter = require('number-to-words');
